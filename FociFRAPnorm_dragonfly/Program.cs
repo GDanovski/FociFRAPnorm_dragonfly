@@ -160,15 +160,16 @@ namespace FociFRAPnorm_dragonfly
             double[] temp;
 
             for (i = avgFrames, j = avgFrames; i < this.MP1.Length; i++)
-            {                
-                if(include)
+            {
+                if (this.MP1[i] == minVal)
+                    include = true;
+
+                if (include)
                 {
                     this.MP1[j] = this.MP1[i];
                     this.MP2[j] = this.MP2[i];
                     j++;
-                }
-                else if (this.MP1[i] == minVal)
-                    include = true;
+                }                
             }
             linesRemoved = i - j;
 
