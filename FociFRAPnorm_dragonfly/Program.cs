@@ -11,9 +11,37 @@ namespace FociFRAPnorm_dragonfly
     {
         static void Main(string[] args)
         {
+            Console.WriteLine(@"
+  
+MIT License
+
+Copyright (c) 2020 Georgi Danovski
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the 'Software'), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and / or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+            The above copyright notice and this permission notice shall be included in all
+            copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-----------------------------------------------------------
+");
             string input;
             string temp;
             int avgFrames;
+            int cutFrom;
+
             Dictionary<string, Data> inputFiles = new Dictionary<string, Data>();
             do
             {
@@ -32,15 +60,28 @@ namespace FociFRAPnorm_dragonfly
             }
             while (!int.TryParse(temp, out avgFrames));
 
+            do
+            {
+                Console.WriteLine("Start from frame:");
+                temp = Console.ReadLine();
+
+            }
+            while (!int.TryParse(temp, out cutFrom));
+
+            if (File.Exists(input + @"Results\Final_Results.txt")) File.Delete(input + @"Results\Final_Results.txt");
+            Console.WriteLine();
             try
             {
                 GetAllFiles(".txt", input, inputFiles);
-                ProcessFiles(inputFiles, avgFrames);
+                ProcessFiles(inputFiles, avgFrames, cutFrom);
             }
             catch(Exception e)
             {
                 Console.WriteLine("Error: " + e.Message);
             }
+
+            Console.WriteLine();
+
             try
             {
                 PrintResults(inputFiles, input);
@@ -49,6 +90,7 @@ namespace FociFRAPnorm_dragonfly
             {
                 Console.WriteLine("Error: " + e.Message);
             }
+            Console.WriteLine();
             Console.WriteLine("Done!");
             Console.ReadLine();
         }
@@ -71,12 +113,12 @@ namespace FociFRAPnorm_dragonfly
         /// Read and process the files in parallel
         /// </summary>
         /// <param name="inputFiles"></param>
-        private static void ProcessFiles(Dictionary<string, Data> inputFiles, int avgFrames)
+        private static void ProcessFiles(Dictionary<string, Data> inputFiles, int avgFrames, int cutFrom)
         {
 
             Parallel.ForEach(inputFiles, (file) => {
                 file.Value.FileName = Path.GetFileNameWithoutExtension(file.Key);                
-                file.Value.SetInputValues(File.ReadAllLines(file.Key));
+                file.Value.SetInputValues(File.ReadAllLines(file.Key),cutFrom);
                 file.Value.ProcessFiles(avgFrames);
             });
         }
@@ -99,9 +141,18 @@ namespace FociFRAPnorm_dragonfly
                 }
             }
 
-            string[] results = new string[maxLength + 1];
+            string[] results = new string[maxLength + 3];            
+            results[2] = string.Join("\t", temp);
+            //add results extractor tags
+            temp = new string[inputFiles.Count + 1];
+            temp[0] = "CTResults:  Mean";
+            temp[1] = "MP_FRAP";
             results[0] = string.Join("\t", temp);
+            temp = new string[inputFiles.Count + 1];
+            temp[0] = "Comments";
+            results[1] = string.Join("\t", temp);
 
+            //add the results
             for (int i = 0; i < maxLength; i++)
             {
                 temp[0] = inputFiles.ElementAt(TimeIndex).Value.GetTime[i].ToString();
@@ -111,10 +162,11 @@ namespace FociFRAPnorm_dragonfly
                     else
                         temp[j + 1] = "0";
 
-                results[i+1] = string.Join("\t", temp);
+                results[i+3] = string.Join("\t", temp);
             }
-
-            File.WriteAllLines(dir + "Final_Results.txt",results);
+            if (!Directory.Exists(dir + @"Results")) Directory.CreateDirectory(dir + @"Results");
+            File.WriteAllLines(dir + @"Results\Final_Results.txt", results);
+            Console.WriteLine("Results directory: " + dir + @"Results - load this folder to the results extractor data panel");
         }
     }
     /// <summary>
@@ -195,12 +247,12 @@ namespace FociFRAPnorm_dragonfly
 
             this.results = NormalizeTo1(this.results, avgFrames);
 
-            Console.WriteLine(this.FileName + " lines removed: " + linesRemoved + "\tfinal length: " + this.results.Length + "");
+            Console.WriteLine(this.FileName + "\tlines removed: " + linesRemoved + "\tfinal length: " + this.results.Length + "");
         }
         
-        public void SetInputValues(string[] inputValues)
+        public void SetInputValues(string[] inputValues, int cutFrom)
         {
-            int colL = inputValues.Length - 3;
+            int colL = inputValues.Length - 3-cutFrom;
             string[] temp;
             double valMP,valBG;
 
@@ -208,7 +260,7 @@ namespace FociFRAPnorm_dragonfly
             MP1 = new double[colL];
             MP2 = new double[colL];
 
-            for(int row = 3, ind = 0; row < inputValues.Length; row++,ind++)
+            for(int row = 3+cutFrom, ind = 0; row < inputValues.Length; row++,ind++)
             {
                 temp = inputValues[row].Split(new string[] { "\t" }, StringSplitOptions.None);
 
