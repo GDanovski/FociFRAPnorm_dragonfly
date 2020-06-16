@@ -288,7 +288,7 @@ SOFTWARE.
                 double.TryParse(temp[0], out Time[ind]);
                 valBG = 0;               
 
-                if (exportCeqandFeq && temp.Length >= 7)
+                if (/*exportCeqandFeq &&*/ temp.Length >= 7)
                 {
                     double.TryParse(temp[6], out valBG);
                     this.BG[ind] = valBG;
