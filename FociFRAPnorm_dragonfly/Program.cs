@@ -41,6 +41,7 @@ SOFTWARE.
             string temp;
             int avgFrames;
             int cutFrom;
+            bool exportCeqandFeq = false;
 
             Dictionary<string, Data> inputFiles = new Dictionary<string, Data>();
             do
@@ -67,13 +68,17 @@ SOFTWARE.
 
             }
             while (!int.TryParse(temp, out cutFrom));
+            /*
+            Console.WriteLine("Do you want to calculate Feq and Ceq? (Y/N)");
+            exportCeqandFeq = Console.ReadKey().Key == ConsoleKey.Y ? true : false;
+            Console.WriteLine();*/
 
             if (File.Exists(input + @"Results\Final_Results.txt")) File.Delete(input + @"Results\Final_Results.txt");
             Console.WriteLine();
             try
             {
                 GetAllFiles(".txt", input, inputFiles);
-                ProcessFiles(inputFiles, avgFrames, cutFrom);
+                ProcessFiles(inputFiles, avgFrames, cutFrom, exportCeqandFeq);
             }
             catch(Exception e)
             {
@@ -85,6 +90,7 @@ SOFTWARE.
             try
             {
                 PrintResults(inputFiles, input);
+                if (exportCeqandFeq) PrintFeqAndCeq(inputFiles, avgFrames, input);
             }
             catch(Exception e)
             {
@@ -113,16 +119,27 @@ SOFTWARE.
         /// Read and process the files in parallel
         /// </summary>
         /// <param name="inputFiles"></param>
-        private static void ProcessFiles(Dictionary<string, Data> inputFiles, int avgFrames, int cutFrom)
+        private static void ProcessFiles(Dictionary<string, Data> inputFiles, int avgFrames, int cutFrom, bool exportCeqandFeq)
         {
 
             Parallel.ForEach(inputFiles, (file) => {
                 file.Value.FileName = Path.GetFileNameWithoutExtension(file.Key);                
-                file.Value.SetInputValues(File.ReadAllLines(file.Key),cutFrom);
+                file.Value.SetInputValues(File.ReadAllLines(file.Key),cutFrom, exportCeqandFeq);
                 file.Value.ProcessFiles(avgFrames);
             });
         }
         //Write the final results to the directory
+        private static void PrintFeqAndCeq(Dictionary<string, Data> inputFiles, int avgFrames, string dir)
+        {
+            string[] temp = new string[inputFiles.Count + 3];
+            temp[0] = "Variable:";
+            for (int i = 0; i < inputFiles.Count; i++)
+            {
+                temp[i + 1] = inputFiles.ElementAt(i).Value.FileName;                
+            }
+            temp[temp.Length - 2] = "avg";
+            temp[temp.Length - 1] = "StDev";
+        }
         private static void PrintResults(Dictionary<string, Data> inputFiles,string dir)
         {
             //find max
@@ -178,6 +195,7 @@ SOFTWARE.
         private double[] Time;
         private double[] MP1;//FRAP
         private double[] MP2;//no FRAP
+        private double[] BG;//BG noise
         private double[] results;
         public string FileName
         {
@@ -250,7 +268,7 @@ SOFTWARE.
             Console.WriteLine(this.FileName + "\tlines removed: " + linesRemoved + "\tfinal length: " + this.results.Length + "");
         }
         
-        public void SetInputValues(string[] inputValues, int cutFrom)
+        public void SetInputValues(string[] inputValues, int cutFrom, bool exportCeqandFeq)
         {
             int colL = inputValues.Length - 3-cutFrom;
             string[] temp;
@@ -259,22 +277,29 @@ SOFTWARE.
             Time = new double[colL];
             MP1 = new double[colL];
             MP2 = new double[colL];
+            BG = new double[colL];
 
             for(int row = 3+cutFrom, ind = 0; row < inputValues.Length; row++,ind++)
             {
                 temp = inputValues[row].Split(new string[] { "\t" }, StringSplitOptions.None);
 
-                if (temp.Length != 5) continue;
+                if (temp.Length < 5) continue;
 
                 double.TryParse(temp[0], out Time[ind]);
-                
+                valBG = 0;               
+
+                if (exportCeqandFeq && temp.Length >= 7)
+                {
+                    double.TryParse(temp[6], out valBG);
+                    this.BG[ind] = valBG;
+                }
                 double.TryParse(temp[1], out valMP);
-                double.TryParse(temp[2], out valBG);
-                this.MP1[ind] = valMP;// - valBG;
+                // double.TryParse(temp[2], out valBG);
+                this.MP1[ind] = valMP - valBG;
 
                 double.TryParse(temp[3], out valMP);
-                double.TryParse(temp[4], out valBG);
-                this.MP2[ind] = valMP;// - valBG;
+                // double.TryParse(temp[4], out valBG);
+                this.MP2[ind] = valMP - valBG;
             }           
         }
         private double[] NormalizeTo1(double[] input, int avgFrames)
