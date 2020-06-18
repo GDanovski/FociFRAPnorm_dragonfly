@@ -126,6 +126,7 @@ SOFTWARE.
                 file.Value.FileName = Path.GetFileNameWithoutExtension(file.Key);                
                 file.Value.SetInputValues(File.ReadAllLines(file.Key),cutFrom, exportCeqandFeq);
                 file.Value.ProcessFiles(avgFrames);
+                file.Value.CalculateResult();
             });
         }
         //Write the final results to the directory
@@ -145,15 +146,20 @@ SOFTWARE.
             //find max
             int maxLength = int.MinValue;
             int TimeIndex = 0;
-            string[] temp = new string[inputFiles.Count + 1];
+            string[] temp = new string[inputFiles.Count*4 + 1];
             temp[0] = "Time";
+            int length = inputFiles.Count;
 
-            for (int i = 0; i < inputFiles.Count; i++)
+            for (int i = 0; i < length; i++)
             {
-                temp[i + 1] = inputFiles.ElementAt(i).Value.FileName;
-                if (inputFiles.ElementAt(i).Value.GetResult.Length > maxLength)
+                temp[i + 1] = "MP1_" + inputFiles.ElementAt(i).Value.FileName;
+                temp[i + 1 + length] = "BG_Nuc_" + inputFiles.ElementAt(i).Value.FileName;
+                temp[i + 1 + 2 * length] = "BG_" + inputFiles.ElementAt(i).Value.FileName;
+                temp[i + 1 + 3 * length] = "Result_" + inputFiles.ElementAt(i).Value.FileName;
+
+                if (inputFiles.ElementAt(i).Value.GetMP1.Length > maxLength)
                 {
-                    maxLength = inputFiles.ElementAt(i).Value.GetResult.Length;
+                    maxLength = inputFiles.ElementAt(i).Value.GetMP1.Length;
                     TimeIndex = i;
                 }
             }
@@ -161,11 +167,11 @@ SOFTWARE.
             string[] results = new string[maxLength + 3];            
             results[2] = string.Join("\t", temp);
             //add results extractor tags
-            temp = new string[inputFiles.Count + 1];
+            temp = new string[inputFiles.Count*4 + 1];
             temp[0] = "CTResults:  Mean";
             temp[1] = "MP_FRAP";
             results[0] = string.Join("\t", temp);
-            temp = new string[inputFiles.Count + 1];
+            temp = new string[inputFiles.Count*4 + 1];
             temp[0] = "Comments";
             results[1] = string.Join("\t", temp);
 
@@ -173,11 +179,22 @@ SOFTWARE.
             for (int i = 0; i < maxLength; i++)
             {
                 temp[0] = inputFiles.ElementAt(TimeIndex).Value.GetTime[i].ToString();
+
                 for (int j = 0; j < inputFiles.Count; j++)
-                    if (inputFiles.ElementAt(j).Value.GetResult.Length > i)
-                        temp[j + 1] = inputFiles.ElementAt(j).Value.GetResult[i].ToString();
+                    if (inputFiles.ElementAt(j).Value.GetMP1.Length > i)
+                    {
+                        temp[j + 1] = inputFiles.ElementAt(j).Value.GetMP1[i].ToString();
+                        temp[j + 1 + length] = inputFiles.ElementAt(j).Value.GetBG_MP1[i].ToString();
+                        temp[j + 1 + 2*length] = inputFiles.ElementAt(j).Value.GetBG[i].ToString();
+                        temp[j + 1 + 3 * length] = inputFiles.ElementAt(j).Value.GetResult[i].ToString();
+                    }
                     else
+                    {
                         temp[j + 1] = "0";
+                        temp[j + 1 + length] = "0";
+                        temp[j + 1 + 2*length] = "0";
+                        temp[j + 1 + 3 * length] = "0";
+                    }
 
                 results[i+3] = string.Join("\t", temp);
             }
@@ -194,9 +211,10 @@ SOFTWARE.
         private string _FileName;
         private double[] Time;
         private double[] MP1;//FRAP
+        private double[] BG_MP1;//BG cell
         private double[] MP2;//no FRAP
         private double[] BG;//BG noise
-        private double[] results;
+        private double[] result;//result
         public string FileName
         {
             set
@@ -215,11 +233,39 @@ SOFTWARE.
                 return this.Time;
             }
         }
+        public double[] GetMP1
+        {
+            get
+            {
+                return this.MP1;
+            }
+        }
+        public double[] GetMP2
+        {
+            get
+            {
+                return this.MP2;
+            }
+        }
+        public double[] GetBG_MP1
+        {
+            get
+            {
+                return this.BG_MP1;
+            }
+        }
+        public double[] GetBG
+        {
+            get
+            {
+                return this.BG;
+            }
+        }
         public double[] GetResult
         {
             get
             {
-                return this.results;
+                return this.result;
             }
         }
         public void ProcessFiles(int avgFrames)
@@ -238,6 +284,8 @@ SOFTWARE.
                 {
                     this.MP1[j] = this.MP1[i];
                     this.MP2[j] = this.MP2[i];
+                    this.BG[j] = this.BG[i];
+                    this.BG_MP1[j] = this.BG_MP1[i];
                     j++;
                 }                
             }
@@ -245,61 +293,70 @@ SOFTWARE.
 
             temp = new double[j];
             Array.Copy(this.MP1, temp, temp.Length);
-            temp = NormalizeTo1(temp, avgFrames);
             this.MP1 = temp;
 
             temp = new double[j];
             Array.Copy(this.MP2, temp, temp.Length);
-            temp = NormalizeTo1(temp, avgFrames);
             this.MP2 = temp;
 
-            this.results = new double[this.MP1.Length];
-            //devide MP1 to MP2
-            for (i = 0; i < this.MP1.Length; i++)
-                this.results[i] = this.MP1[i] / this.MP2[i];
+            temp = new double[j];
+            Array.Copy(this.BG, temp, temp.Length);
+            this.BG = temp;
 
-            minVal = this.results[avgFrames];
-
-            for (i = 0; i < this.results.Length; i++)
-                this.results[i] -= minVal;
-
-            this.results = NormalizeTo1(this.results, avgFrames);
-
-            Console.WriteLine(this.FileName + "\tlines removed: " + linesRemoved + "\tfinal length: " + this.results.Length + "");
+            temp = new double[j];
+            Array.Copy(this.BG_MP1, temp, temp.Length);
+            this.BG_MP1 = temp;
+            
+            Console.WriteLine(this.FileName + "\tlines removed: " + linesRemoved + "\tfinal length: " + this.MP1.Length + "");
         }
-        
+        public void CalculateResult()
+        {
+            //FRAP_Results_Raw_ATM_0.02114uM
+            double ATM_conc = 0.021149088d;//uM
+            double BG = this.GetBG.Average();
+            double C_AU = ATM_conc /( this.CalcNucAU - BG);
+
+            this.result = new double[this.GetMP1.Length];
+
+            for (int i = 0; i < this.GetMP1.Length; i++)
+            {
+                this.result[i] = (this.GetMP1[i] - BG) * C_AU;
+            }
+        }
+        private double CalcNucAU
+        {
+            get
+            {
+                double output = 0;
+                for (int i = 0; i < 5; i++)
+                    output += this.GetBG_MP1[i];
+
+                output /= 5;
+
+                return output;
+            }
+        }
         public void SetInputValues(string[] inputValues, int cutFrom, bool exportCeqandFeq)
         {
             int colL = inputValues.Length - 3-cutFrom;
             string[] temp;
-            double valMP,valBG;
 
             Time = new double[colL];
             MP1 = new double[colL];
             MP2 = new double[colL];
             BG = new double[colL];
+            BG_MP1 = new double[colL];
 
-            for(int row = 3+cutFrom, ind = 0; row < inputValues.Length; row++,ind++)
+            for (int row = 3+cutFrom, ind = 0; row < inputValues.Length; row++,ind++)
             {
                 temp = inputValues[row].Split(new string[] { "\t" }, StringSplitOptions.None);
 
                 if (temp.Length < 5) continue;
 
                 double.TryParse(temp[0], out Time[ind]);
-                valBG = 0;               
-
-                if (/*exportCeqandFeq &&*/ temp.Length >= 7)
-                {
-                    double.TryParse(temp[6], out valBG);
-                    this.BG[ind] = valBG;
-                }
-                double.TryParse(temp[1], out valMP);
-                // double.TryParse(temp[2], out valBG);
-                this.MP1[ind] = valMP - valBG;
-
-                double.TryParse(temp[3], out valMP);
-                // double.TryParse(temp[4], out valBG);
-                this.MP2[ind] = valMP - valBG;
+                double.TryParse(temp[1], out this.MP1[ind]);
+                double.TryParse(temp[2], out this.BG_MP1[ind]);
+                double.TryParse(temp[5], out this.BG[ind]);
             }           
         }
         private double[] NormalizeTo1(double[] input, int avgFrames)
